@@ -1,0 +1,48 @@
+# Environment
+.env
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project artifacts
+data/*.csv
+data/*.xlsx
+data/*.json
+!data/.gitkeep
+reports/*.html
+reports/*.md
+reports/*.png
+reports/*.jpg
+!reports/.gitkeep
+tmp/
+*.db
+*.pkl
+*.joblib
+
+# Personal learning notes
+implementation/
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/

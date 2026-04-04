@@ -1,0 +1,213 @@
+# 🛠️ Phase 1 — Environment & Project Scaffold Setup
+
+> **Date:** 2026-04-04  
+> **Scope:** Full project skeleton, virtual environment, dependency installation, and configuration system  
+> **Status:** ✅ Complete
+
+---
+
+## 1. What Was Done
+
+This phase bootstrapped the entire `auto-analytics-agent` project from an empty directory (containing only `IMPLEMENTATION_GUIDE.md`) into a fully structured, dependency-installed, configuration-ready Python project.
+
+### 1.1 Virtual Environment
+
+Created an isolated Python virtual environment at `venv/` using the system Python:
+
+```bash
+python -m venv venv
+```
+
+- **Location:** [venv/](file:///d:/IIT%20CODES/PROJECTS/AG%20auto-analytics-agent/venv/)
+- **Activation command:** `.\venv\Scripts\activate`
+- All subsequent operations use `.\venv\Scripts\python.exe` and `.\venv\Scripts\pip.exe`
+
+---
+
+### 1.2 Dependency Installation
+
+Created [requirements.txt](file:///d:/IIT%20CODES/PROJECTS/AG%20auto-analytics-agent/requirements.txt) with all project dependencies and installed them into the venv.
+
+#### Dependencies by Category
+
+| Category | Packages | Purpose |
+|----------|----------|---------|
+| **Orchestration** | `langgraph>=0.2.0`, `langchain>=0.3.0` | Stateful graph-based agent orchestration |
+| **LLM Providers** | `langchain-openai>=0.2.0`, `langchain-google-genai>=2.0.0` | OpenAI GPT-4o and Google Gemini integration |
+| **Backend** | `fastapi>=0.115.0`, `uvicorn>=0.30.0`, `python-multipart>=0.0.12`, `httpx>=0.27.0`, `websockets>=13.0` | REST API + WebSocket server |
+| **Frontend** | `streamlit>=1.40.0` | Data-centric UI |
+| **Data Processing** | `pandas>=2.2.0`, `numpy>=1.26.0` | Tabular data manipulation |
+| **Machine Learning** | `scikit-learn>=1.5.0`, `xgboost>=2.1.0`, `lightgbm>=4.5.0` | Model training and evaluation |
+| **Visualization** | `matplotlib>=3.9.0`, `seaborn>=0.13.0`, `plotly>=5.24.0` | Static + interactive charts |
+| **Configuration** | `pydantic>=2.9.0`, `pydantic-settings>=2.5.0`, `python-dotenv>=1.0.0` | Type-safe settings from `.env` |
+| **Testing** | `pytest>=8.0.0`, `pytest-asyncio>=0.24.0` | Test framework |
+| **Database** | `aiosqlite>=0.20.0` | Async SQLite for LangGraph checkpointer |
+
+> [!NOTE]
+> All imports were verified with exit code 0 after installation.
+
+---
+
+### 1.3 Project Directory Structure
+
+Created the full directory tree matching the architecture in `IMPLEMENTATION_GUIDE.md`. Every Python package has an `__init__.py` file.
+
+```
+auto-analytics-agent/
+│
+├── .env.example          # Environment variable template
+├── .env                  # Active config (gitignored)
+├── .gitignore            # Python + project-specific ignores
+├── requirements.txt      # All dependencies
+├── IMPLEMENTATION_GUIDE.md
+│
+├── config/
+│   ├── __init__.py
+│   └── settings.py       # Pydantic Settings — central config
+│
+├── core/
+│   └── __init__.py       # (state.py, orchestrator.py, llm.py, prompts.py — to be built)
+│
+├── agents/
+│   └── __init__.py       # (base_agent.py, data_profiler.py, etc. — to be built)
+│
+├── tools/
+│   └── __init__.py       # (code_executor.py, file_manager.py, etc. — to be built)
+│
+├── api/
+│   ├── __init__.py
+│   ├── routes/
+│   │   └── __init__.py   # (pipeline.py, health.py — to be built)
+│   └── models/
+│       └── __init__.py   # (schemas.py — to be built)
+│
+├── ui/
+│   ├── __init__.py
+│   ├── pages/
+│   │   └── __init__.py   # (1_upload.py, 2_profile.py, etc. — to be built)
+│   └── components/
+│       └── __init__.py   # (sidebar.py, metrics_card.py, etc. — to be built)
+│
+├── data/
+│   └── .gitkeep          # Uploaded datasets directory
+│
+├── reports/
+│   └── .gitkeep          # Generated output directory
+│
+├── tmp/                  # Temporary code execution sandbox
+│
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py       # Shared pytest fixtures
+│   ├── test_agents/
+│   │   └── __init__.py
+│   ├── test_tools/
+│   │   └── __init__.py
+│   └── test_api/
+│       └── __init__.py
+│
+└── venv/                 # Python virtual environment
+```
+
+---
+
+### 1.4 Configuration System
+
+#### [.env.example](file:///d:/IIT%20CODES/PROJECTS/AG%20auto-analytics-agent/.env.example)
+
+Template file with all configurable environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_PROVIDER` | `openai` | Active LLM provider (`openai`, `gemini`, `ollama`) |
+| `OPENAI_API_KEY` | — | OpenAI API key (user must fill) |
+| `OPENAI_MODEL` | `gpt-4o` | OpenAI model name |
+| `GOOGLE_API_KEY` | — | Google Gemini API key |
+| `GEMINI_MODEL` | `gemini-1.5-pro` | Gemini model name |
+| `OLLAMA_MODEL` | `llama3` | Local Ollama model |
+| `APP_ENV` | `development` | Environment mode |
+| `DEBUG` | `true` | Debug flag |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `BACKEND_HOST` | `0.0.0.0` | FastAPI host |
+| `BACKEND_PORT` | `8000` | FastAPI port |
+| `FRONTEND_PORT` | `8501` | Streamlit port |
+| `BACKEND_URL` | `http://localhost:8000` | URL frontend uses to reach backend |
+| `CODE_EXECUTION_TIMEOUT` | `120` | Max seconds for sandboxed code |
+| `MAX_RETRIES` | `3` | Self-healing retry limit |
+| `MAX_UPLOAD_SIZE_MB` | `100` | Upload size cap |
+| `MAX_ROWS_FOR_PROFILING` | `50000` | Row sampling limit |
+
+#### [config/settings.py](file:///d:/IIT%20CODES/PROJECTS/AG%20auto-analytics-agent/config/settings.py)
+
+Pydantic Settings class that:
+
+- Automatically loads values from `.env` file
+- Provides type-safe access to all config values
+- Includes a `llm_model` computed property that returns the correct model name based on the active provider
+- Exports a singleton `settings` instance for project-wide import:
+
+```python
+from config.settings import settings
+
+print(settings.llm_provider)   # "openai"
+print(settings.llm_model)      # "gpt-4o"
+print(settings.debug)          # True
+```
+
+---
+
+### 1.5 Git Configuration
+
+#### [.gitignore](file:///d:/IIT%20CODES/PROJECTS/AG%20auto-analytics-agent/.gitignore)
+
+Covers:
+
+- **Environment:** `.env`, `venv/`, `.venv/`
+- **Python:** `__pycache__/`, `*.pyc`, `*.egg-info/`, `dist/`, `build/`
+- **IDE:** `.vscode/`, `.idea/`
+- **OS:** `.DS_Store`, `Thumbs.db`
+- **Project artifacts:** `data/*.csv`, `reports/*.html`, `tmp/`, `*.db`, `*.pkl`
+- **Preserves:** `.gitkeep` files in `data/` and `reports/`
+
+---
+
+### 1.6 Test Infrastructure
+
+#### [tests/conftest.py](file:///d:/IIT%20CODES/PROJECTS/AG%20auto-analytics-agent/tests/conftest.py)
+
+Two shared fixtures:
+
+| Fixture | Description |
+|---------|-------------|
+| `sample_csv` | Creates a 10-row CSV with mixed types (numerics, categoricals, missing values) at a temp path |
+| `project_root` | Returns the absolute path to the project root directory |
+
+---
+
+## 2. Verification
+
+| Check | Result |
+|-------|--------|
+| `python -m venv venv` | ✅ Created (exit code 0) |
+| `pip install -r requirements.txt` | ✅ All packages installed (exit code 0) |
+| Import all 13 key packages | ✅ All imports passed (exit code 0) |
+| Load `config.settings.settings` | ✅ Settings object loads from `.env` (exit code 0) |
+
+---
+
+## 3. What's Next
+
+> [!IMPORTANT]
+> Before proceeding, edit `.env` and add your actual API key for your chosen provider (`OPENAI_API_KEY` or `GOOGLE_API_KEY`).
+
+The next phase (Phase 1 of the **Implementation Guide**) involves building the first functional components:
+
+1. **`core/state.py`** — `PipelineState` TypedDict (shared state schema)
+2. **`core/llm.py`** — LLM client factory (OpenAI / Gemini / Ollama)
+3. **`agents/base_agent.py`** — Abstract base class with self-healing code execution
+4. **`tools/code_executor.py`** — Sandboxed Python code execution
+5. **`tools/file_manager.py`** — Dataset and artifact file management
+6. **`agents/data_profiler.py`** — First agent: Data Profiler
+7. **`core/orchestrator.py`** — Minimal LangGraph pipeline (Profiler only)
+8. **`api/main.py`** — FastAPI with `POST /upload` endpoint
+9. **`ui/app.py`** — Streamlit upload page + profile viewer
