@@ -46,3 +46,6 @@ implementation/
 
 # Jupyter
 .ipynb_checkpoints/
+
+#Token
+Github_Token.txt
