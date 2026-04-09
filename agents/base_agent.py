@@ -22,6 +22,7 @@ import re
 from core.state import PipelineState
 from core.llm import get_llm
 from tools.code_executor import execute_code
+from core.prompts import NO_CODE_FOUND_PROMPT, RETRY_CODE_PROMPT
 
 
 class BaseAgent(ABC):
@@ -69,11 +70,7 @@ class BaseAgent(ABC):
             if not code:
                 # The LLM forgot to put code in a markdown block
                 print(f"[{self.name}] No code found in response on attempt {attempt + 1}")
-                current_prompt = (
-                    "Failed to find Python code in your previous response. "
-                    "Please provide the code wrapped in ```python ... ``` blocks.\n\n"
-                    f"Original prompt:\n{prompt}"
-                )
+                current_prompt = NO_CODE_FOUND_PROMPT.format(prompt=prompt)
                 continue
                 
             # 3. Act: Run the code safely in the sandbox
@@ -128,19 +125,8 @@ class BaseAgent(ABC):
         """
         Create a prompt telling the LLM its code failed and asking it to fix it.
         """
-        return f"""
-The Python code you generated failed to execute. You must fix it.
-
-## Failed Code (Attempt {attempt + 1})
-```python
-{failed_code}
-```
-
-## Error Output
-```text
-{error}
-```
-
-Please analyze the error, identify the bug, and provide the corrected Python code.
-Output ONLY the corrected code inside ```python ... ``` blocks, with no conversational filler.
-"""
+        return RETRY_CODE_PROMPT.format(
+            attempt=attempt + 1,
+            failed_code=failed_code,
+            error=error
+        )

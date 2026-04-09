@@ -152,7 +152,9 @@ class PipelineState(TypedDict):
 
     # --- Agent Outputs (None until each agent runs) ---
     data_profile: Optional[DataProfile]                 # Written by Profiler
-    cleaning_report: Optional[CleaningReport]           # Written by Cleaner
+    cleaning_plan: Optional[dict]                       # Written by Cleaner (Phase 1)
+    human_feedback: Optional[str]                       # Written by User (Human-in-the-loop)
+    cleaning_report: Optional[CleaningReport]           # Written by Cleaner (Phase 2)
     feature_report: Optional[FeatureReport]             # Written by Engineer
     training_results: Optional[list[TrainingResult]]    # Written by Trainer
     evaluation_report: Optional[EvaluationReport]       # Written by Evaluator

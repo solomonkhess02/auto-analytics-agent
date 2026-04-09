@@ -20,6 +20,7 @@ HOW IT WORKS:
 import json
 from agents.base_agent import BaseAgent
 from core.state import PipelineState, DataProfile
+from core.prompts import PROFILER_CODE_PROMPT, PROFILER_SUMMARY_PROMPT
 
 class DataProfilerAgent(BaseAgent):
     def __init__(self):
@@ -42,23 +43,7 @@ class DataProfilerAgent(BaseAgent):
         # --- Phase 1: Generate & Run Code ---
         # We ask the LLM to write a Python script that analyzes the data
         # and prints the results as a JSON string.
-        code_prompt = f"""
-You are a Data Scientist Agent. Analyze the dataset at '{dataset_path}'.
-
-Write a Python script that:
-1. Loads the dataset using pandas.
-2. Calculates the following statistics:
-   - shape (list of 2 integers: [rows, columns])
-   - columns (list of strings)
-   - dtypes (dictionary mapping column names to string representations of their types)
-   - missing_values (dictionary mapping column names to missing value counts)
-   - missing_percentages (dictionary mapping column names to percentage of missing values as floats)
-   - unique_counts (dictionary mapping column names to number of unique values)
-3. Outputs the final result EXACTLY as a valid JSON string using `json.dumps()`.
-4. Ensure the output only contains the JSON string and absolutely nothing else. Print the JSON at the very end.
-
-IMPORTANT: Use proper error handling when reading the file.
-"""
+        code_prompt = PROFILER_CODE_PROMPT.format(dataset_path=dataset_path)
         try:
             # This calls the method we wrote in BaseAgent!
             # It will automatically retry (self-heal) if the code crashes.
@@ -94,15 +79,11 @@ IMPORTANT: Use proper error handling when reading the file.
         # --- Phase 3: Natural Language Summary ---
         # We now have the raw numbers. Let's ask the LLM to explain them like a human.
         print(f"[{self.name}] Generating natural language summary...")
-        summary_prompt = f"""
-You are a Data Science consultant. Review these dataset statistics:
-Shape: {stats.get('shape')}
-Missing Values: {stats.get('missing_values')}
-Data Types: {stats.get('dtypes')}
-
-Write a concise, professional 3-sentence summary of this dataset.
-Mention its size, any data quality issues (like missing values), and the general composition of the columns.
-"""
+        summary_prompt = PROFILER_SUMMARY_PROMPT.format(
+            shape=stats.get('shape'),
+            missing_values=stats.get('missing_values'),
+            dtypes=stats.get('dtypes')
+        )
         summary_response = self.llm.invoke(summary_prompt)
         
         # Extract text safely (handling newest Gemini list format)
