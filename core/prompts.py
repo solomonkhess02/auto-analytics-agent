@@ -94,3 +94,58 @@ Instructions:
 4. Print a JSON object describing before/after stats: {{"missing_before": x, "missing_after": y, "rows_before": a, "rows_after": b}}
 5. Provide ONLY the Python code in ```python ... ``` blocks.
 """
+
+
+# ============================================================================
+# Feature Engineer Prompts
+# ============================================================================
+
+FEATURE_ENGINEER_PLAN_PROMPT = """You are a Senior ML Engineer planning feature engineering for a dataset.
+Review the data profile and the cleaned data info below carefully.
+
+Task Type: {task_type}
+Target Column: {target_column}
+Profile Summary:
+{profile_summary}
+
+Create a structured JSON plan to engineer features for this dataset.
+The plan MUST be a dictionary with these string keys:
+- "datetime_features": list of date/time columns to extract features from (year, month, day, etc.).
+- "categorical_encoding": dictionary detailing columns to encode and method (e.g., {{"city": "one_hot", "priority": "ordinal"}}).
+- "numerical_scaling": description of how numerical columns should be scaled (e.g., standard, minmax).
+- "new_features": list of specific new interaction or ratio features to create.
+- "reasoning": a short sentence explaining these decisions.
+
+Output EXACTLY valid JSON, nothing else."""
+
+FEATURE_ENGINEER_EXECUTE_PROMPT = """You are a Python Data Engineer. Write a script to engineer features based on the following plan.
+
+Dataset path: {cleaned_dataset_path}
+Output dataset path (MUST save to this): {engineered_dataset_path}
+Target column (DO NOT scale/encode this): {target_column}
+Human Feedback/Instructions: {human_feedback}
+
+Feature Engineering Plan:
+{feature_plan}
+
+Instructions:
+1. Load dataset with pandas.
+2. Apply the feature engineering plan, adjusting carefully for any Human Feedback. Use sklearn preprocessing where appropriate (OneHotEncoder, StandardScaler, etc.).
+3. Save the final engineered dataframe to the output path using `df.to_csv(..., index=False)`.
+4. Print a JSON object describing before/after stats: {{"features_before": x, "features_after": y, "new_columns": [...], "dropped_columns": [...]}}
+5. Provide ONLY the Python code in ```python ... ``` blocks.
+"""
+
+FEATURE_SELECTION_PROMPT = """You are an ML Engineer performing feature selection.
+Analyze the provided feature importance scores and multicollinearity metrics.
+
+Feature Importances:
+{feature_importances}
+
+Task:
+Determine which features should be dropped to improve model generalization and reduce multicollinearity.
+
+Output a structured JSON dictionary with:
+- "features_to_drop": list of string column names to drop.
+- "reasoning": explanation of why these were chosen to be dropped.
+Output EXACTLY valid JSON, nothing else."""
