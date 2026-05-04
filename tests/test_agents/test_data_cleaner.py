@@ -10,7 +10,7 @@ def dirty_dataset_path(tmp_path):
         "id": [1, 2, 3, 4],
         "name": ["A", "B", "C", "D"],
         "age": [25, None, 35, 45],
-        "salary": [50k, 60k, None, 80k]
+        "salary": ["50k", "60k", None, "80k"]
     })
     path = tmp_path / "dirty.csv"
     df.to_csv(path, index=False)

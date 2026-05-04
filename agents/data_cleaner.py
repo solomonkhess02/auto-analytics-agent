@@ -1,14 +1,5 @@
 """
-Data Cleaner Agent — Implements Agentic Reasoning for Data Cleaning.
-
-WHAT THIS FILE DOES:
-    This agent is split into two parts (planning and executing) to allow
-    for human-in-the-loop feedback. 
-    
-    1. generate_plan: Looks at the data profile and reasons about what
-       needs to be cleaned, outputting a structured JSON plan.
-    2. execute_plan: (Will be implemented in Step 11) takes the plan +
-       human feedback, writes pandas code, runs it, and validates the result.
+Data Cleaner Agent.
 """
 
 import json
@@ -22,24 +13,15 @@ class DataCleanerAgent(BaseAgent):
         super().__init__(name="Cleaner")
 
     def run(self, state: PipelineState) -> dict:
-        """
-        Since we are splitting this agent into two nodes for human-in-the-loop,
-        we won't use the standard `run` method directly in our graph.
-        Instead, we will route to `generate_plan` and `execute_plan`.
-        """
         pass
 
     def generate_plan(self, state: PipelineState) -> dict:
-        """
-        Step 1: Reason about the data and create a cleaning plan.
-        """
         profile = state.get("data_profile")
         if not profile:
             return {"errors": ["Cleaner Agent: No data_profile found in state. Did the Profiler run?"]}
 
         print(f"[{self.name}] Analyzing data profile to generate a cleaning plan...")
 
-        # We feed a focused summary of the profile to the LLM to avoid context overload
         profile_summary = json.dumps({
             "shape": profile.get("shape"),
             "dtypes": profile.get("dtypes"),
@@ -49,15 +31,11 @@ class DataCleanerAgent(BaseAgent):
 
         prompt = CLEANER_PLAN_PROMPT.format(profile_summary=profile_summary)
         
-        # Invoke the LLM to get our JSON plan
         response = self.llm.invoke(prompt)
-        
-        # Safely extract text content
         text_content = response.content
         if isinstance(text_content, list):
             text_content = "\n".join([item.get("text", "") if isinstance(item, dict) else str(item) for item in text_content])
             
-        # Clean markdown formatting if the LLM adds it
         text_content = text_content.strip()
         if text_content.startswith("```json"):
             text_content = text_content[7:]
@@ -78,9 +56,6 @@ class DataCleanerAgent(BaseAgent):
             return {"errors": [f"Cleaner Agent failed to parse cleaning plan as JSON."]}
 
     def execute_plan(self, state: PipelineState) -> dict:
-        """
-        Step 2: Execute the plan, run code, and validate results.
-        """
         dataset_path = state.get("dataset_path")
         plan = state.get("cleaning_plan")
         feedback = state.get("human_feedback", "None")
@@ -91,7 +66,6 @@ class DataCleanerAgent(BaseAgent):
         output_path = os.path.join("data", "cleaned_dataset.csv")
         os.makedirs("data", exist_ok=True)
         
-        # Prepare the execution prompt
         prompt = CLEANER_CODE_PROMPT.format(
             dataset_path=dataset_path,
             output_path=output_path,
@@ -101,9 +75,6 @@ class DataCleanerAgent(BaseAgent):
 
         print(f"[{self.name}] Writing and executing cleaning code...")
         
-        # Validation Loop (Business Logic Check)
-        # _generate_and_execute_code handles code crashes. 
-        # This loop handles code that runs but fails to actually clean the data.
         max_validation_attempts = 3
         current_prompt = prompt
         
@@ -113,9 +84,7 @@ class DataCleanerAgent(BaseAgent):
             except RuntimeError as e:
                 return {"errors": [f"Cleaner execution totally failed: {str(e)}"]}
 
-            # Step 4 of the prompt asks that they print a JSON object. We parse it here.
             try:
-                # Find JSON block in the output
                 json_str = output.strip()
                 start_idx = json_str.find('{')
                 end_idx = json_str.rfind('}')
@@ -128,7 +97,6 @@ class DataCleanerAgent(BaseAgent):
 
             missing_after = stats.get("missing_after", 0)
             
-            # The True Validation!
             if missing_after > 0:
                 print(f"[{self.name}] VALIDATION FAILED: {missing_after} missing values remain! Retrying...")
                 current_prompt = (
@@ -140,7 +108,6 @@ class DataCleanerAgent(BaseAgent):
             else:
                 print(f"[{self.name}] Validation Passed: Dataset is completely clean.")
                 
-                # We return the state updates!
                 cleaning_report = {
                     "actions_taken": ["Executed LLM Cleaning Plan"],
                     "columns_dropped": plan.get("drop_columns", []),

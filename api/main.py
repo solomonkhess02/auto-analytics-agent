@@ -1,23 +1,17 @@
 """
-API main router — Connects the LangGraph Orchestrator to the outside world.
-
-WHAT THIS FILE DOES:
-    Initializes FastAPI and creates an Endpoint (/api/run).
-    When the Frontend sends a request to this endpoint, it triggers our Graph
-    and returns the resulting Agent state back to the browser.
+FastAPI router for LangGraph orchestration.
 """
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+import uuid
 
 from core.graph import build_graph
 
-# Create the FastAPI app
-app = FastAPI(title="Auto-Analytics Agent")
+app = FastAPI(title="Auto-Analytics Agent API", version="2.0.0")
 
-# Allow the Next.js frontend (which will run on port 3000) to talk to this backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -26,42 +20,133 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define the expected JSON payload format
-class RunPipelineRequest(BaseModel):
+workflow_app = build_graph()
+active_sessions: dict[str, dict] = {}
+
+
+class StartPipelineRequest(BaseModel):
     dataset_path: str
     task_type: str = "auto"
 
-# Compile the LangGraph orchestrator once when the severe starts
-workflow_app = build_graph()
+class ApproveStepRequest(BaseModel):
+    human_feedback: str = "Looks good, proceed."
 
-# Our single API endpoint
-@app.post("/api/run")
-def run_pipeline(request: RunPipelineRequest):
+
+@app.post("/api/pipeline/start")
+def start_pipeline(request: StartPipelineRequest):
     """
-    Endpoint that triggers the LangGraph workflow.
+    Initializes a new pipeline run.
     """
-    # Safety check
     if not os.path.exists(request.dataset_path):
-         raise HTTPException(status_code=404, detail="Dataset file not found.")
+        raise HTTPException(status_code=404, detail=f"Dataset not found: '{request.dataset_path}'")
 
-    # Prepare user input for the graph
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    active_sessions[thread_id] = config
+
     initial_state = {
         "dataset_path": request.dataset_path,
-        "task_type": request.task_type
+        "task_type": request.task_type,
+        "messages": [],
+        "errors": [],
+        "warnings": [],
     }
-    
+
     try:
-        # ▶ RUN THE AGENT PIPELINE!
-        final_state = workflow_app.invoke(initial_state)
-        
-        # Send only the relevant parts of the state back to the frontend
+        for _ in workflow_app.stream(initial_state, config=config, stream_mode="values"):
+            pass
+
+        state = workflow_app.get_state(config)
+
+        errors = state.values.get("errors", [])
+        if errors:
+            raise HTTPException(status_code=500, detail=f"Pipeline error: {errors}")
+
         return {
-            "status": "success",
-            "phase": final_state.get("current_phase"),
-            "data_profile": final_state.get("data_profile"),
-            "errors": final_state.get("errors")
+            "thread_id": thread_id,
+            "paused_before": list(state.next),
+            "data_profile": state.values.get("data_profile"),
+            "cleaning_plan": state.values.get("cleaning_plan"),
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        # If the graph violently crashes, return a 500 server error
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pipeline/{thread_id}/approve-cleaning")
+def approve_cleaning(thread_id: str, request: ApproveStepRequest):
+    """
+    Resumes graph execution after cleaner plan approval.
+    """
+    if thread_id not in active_sessions:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    config = active_sessions[thread_id]
+
+    try:
+        workflow_app.update_state(config, {"human_feedback": request.human_feedback}, as_node="cleaner_plan")
+
+        for _ in workflow_app.stream(None, config=config, stream_mode="values"):
+            pass
+
+        state = workflow_app.get_state(config)
+
+        errors = state.values.get("errors", [])
+        if errors:
+            raise HTTPException(status_code=500, detail=f"Pipeline error: {errors}")
+
+        return {
+            "thread_id": thread_id,
+            "paused_before": list(state.next),
+            "cleaning_report": state.values.get("cleaning_report"),
+            "feature_plan": state.values.get("feature_plan"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pipeline/{thread_id}/approve-features")
+def approve_features(thread_id: str, request: ApproveStepRequest):
+    """
+    Resumes graph execution after feature plan approval.
+    """
+    if thread_id not in active_sessions:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    config = active_sessions[thread_id]
+
+    try:
+        workflow_app.update_state(config, {"human_feedback": request.human_feedback}, as_node="engineer_plan")
+
+        for _ in workflow_app.stream(None, config=config, stream_mode="values"):
+            pass
+
+        state = workflow_app.get_state(config)
+
+        errors = state.values.get("errors", [])
+        if errors:
+            raise HTTPException(status_code=500, detail=f"Pipeline error: {errors}")
+
+        del active_sessions[thread_id]
+
+        return {
+            "thread_id": thread_id,
+            "paused_before": [],
+            "feature_report": state.values.get("feature_report"),
+            "engineered_dataset_path": state.values.get("engineered_dataset_path"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "active_sessions": len(active_sessions)}

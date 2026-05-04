@@ -1,14 +1,6 @@
 """
-Prompts — Centralized brain for the agents.
-
-WHAT THIS FILE DOES:
-    Contains all the prompt templates used by our agents.
-    Separating prompts from logic makes it easier to tune the AI's behavior.
+Prompt templates used by the LLM agents.
 """
-
-# ============================================================================
-# General / Base Agent Prompts
-# ============================================================================
 
 NO_CODE_FOUND_PROMPT = """Failed to find Python code in your previous response. 
 Please provide the code wrapped in ```python ... ``` blocks.
@@ -31,9 +23,7 @@ RETRY_CODE_PROMPT = """The Python code you generated failed to execute. You must
 Please analyze the error, identify the bug, and provide the corrected Python code.
 Output ONLY the corrected code inside ```python ... ``` blocks, with no conversational filler."""
 
-# ============================================================================
-# Data Profiler Prompts
-# ============================================================================
+
 
 PROFILER_CODE_PROMPT = """You are a Data Scientist Agent. Analyze the dataset at '{dataset_path}'.
 
@@ -60,9 +50,7 @@ Write a concise, professional 3-sentence summary of this dataset.
 Mention its size, any data quality issues (like missing values), and the general composition of the columns."""
 
 
-# ============================================================================
-# Data Cleaner Prompts
-# ============================================================================
+
 
 CLEANER_PLAN_PROMPT = """You are a Data Cleaning Planner. Review the dataset profile below to identify issues.
 
@@ -96,9 +84,7 @@ Instructions:
 """
 
 
-# ============================================================================
-# Feature Engineer Prompts
-# ============================================================================
+
 
 FEATURE_ENGINEER_PLAN_PROMPT = """You are a Senior ML Engineer planning feature engineering for a dataset.
 Review the data profile and the cleaned data info below carefully.
@@ -111,10 +97,14 @@ Profile Summary:
 Create a structured JSON plan to engineer features for this dataset.
 The plan MUST be a dictionary with these string keys:
 - "datetime_features": list of date/time columns to extract features from (year, month, day, etc.).
-- "categorical_encoding": dictionary detailing columns to encode and method (e.g., {{"city": "one_hot", "priority": "ordinal"}}).
+- "categorical_encoding": dictionary detailing columns to encode and method (e.g., {{"city": "one_hot", "priority": "ordinal"}}). Do not encode unique identifiers (like 'id', 'name').
 - "numerical_scaling": description of how numerical columns should be scaled (e.g., standard, minmax).
 - "new_features": list of specific new interaction or ratio features to create.
 - "reasoning": a short sentence explaining these decisions.
+
+IMPORTANT RULES:
+1. Never encode unique identifier columns (e.g. 'id', 'name'). They should be ignored or dropped.
+2. If calculating new features (like ratios) from numerical columns, specify that they must be calculated BEFORE scaling the numerical columns.
 
 Output EXACTLY valid JSON, nothing else."""
 
@@ -130,7 +120,10 @@ Feature Engineering Plan:
 
 Instructions:
 1. Load dataset with pandas.
-2. Apply the feature engineering plan, adjusting carefully for any Human Feedback. Use sklearn preprocessing where appropriate (OneHotEncoder, StandardScaler, etc.).
+2. Apply the feature engineering plan, adjusting carefully for any Human Feedback. 
+   - IMPORTANT: Calculate any `new_features` (like ratios or sums) FIRST, BEFORE applying any numerical scaling to the base columns.
+   - IMPORTANT: Do not apply encoding or scaling to unique identifier columns like 'id' or 'name'.
+   - Use sklearn preprocessing where appropriate (OneHotEncoder, StandardScaler, etc.).
 3. Save the final engineered dataframe to the output path using `df.to_csv(..., index=False)`.
 4. Print a JSON object describing before/after stats: {{"features_before": x, "features_after": y, "new_columns": [...], "dropped_columns": [...]}}
 5. Provide ONLY the Python code in ```python ... ``` blocks.
