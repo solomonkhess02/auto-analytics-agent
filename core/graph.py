@@ -49,6 +49,11 @@ def build_graph():
         updates["current_phase"] = "engineer_executing"
         return updates
 
+    def run_engineer_select(state: PipelineState):
+        updates = feature_engineer_agent.select_features(state)
+        updates["current_phase"] = "engineer_selecting"
+        return updates
+
     def run_model_trainer(state: PipelineState):
         updates = model_trainer_agent.run(state)
         updates["current_phase"] = "model_training"
@@ -64,6 +69,7 @@ def build_graph():
     workflow.add_node("cleaner_execute", run_cleaner_execute)
     workflow.add_node("engineer_plan", run_engineer_plan)
     workflow.add_node("engineer_execute", run_engineer_execute)
+    workflow.add_node("engineer_select", run_engineer_select)
     workflow.add_node("model_trainer", run_model_trainer)
     workflow.add_node("evaluator", run_evaluator)
 
@@ -82,7 +88,8 @@ def build_graph():
     workflow.add_conditional_edges("cleaner_plan", route_after("cleaner_execute"), ["cleaner_execute", END])
     workflow.add_conditional_edges("cleaner_execute", route_after("engineer_plan"), ["engineer_plan", END])
     workflow.add_conditional_edges("engineer_plan", route_after("engineer_execute"), ["engineer_execute", END])
-    workflow.add_conditional_edges("engineer_execute", route_after("model_trainer"), ["model_trainer", END])
+    workflow.add_conditional_edges("engineer_execute", route_after("engineer_select"), ["engineer_select", END])
+    workflow.add_conditional_edges("engineer_select", route_after("model_trainer"), ["model_trainer", END])
     workflow.add_conditional_edges("model_trainer", route_after("evaluator"), ["evaluator", END])
     workflow.add_edge("evaluator", END)
     

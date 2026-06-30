@@ -81,10 +81,10 @@ class DataProfilerAgent(BaseAgent):
             "dtypes": stats.get("dtypes", {}),
             "missing_values": stats.get("missing_values", {}),
             "missing_percentages": stats.get("missing_percentages", {}),
-            "descriptive_stats": {}, 
+            "descriptive_stats": stats.get("descriptive_stats", {}),
             "unique_counts": stats.get("unique_counts", {}),
-            "sample_rows": [],
-            "correlations": {},
+            "sample_rows": stats.get("sample_rows", []),
+            "correlations": stats.get("correlations", {}),
             "target_column": target_column,
             "task_type": task_type,
             "profiler_summary": summary_text.strip()
