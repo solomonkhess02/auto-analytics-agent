@@ -43,6 +43,7 @@ class TrainingResult(TypedDict):
     """Result from training a single model."""
     model_name: str
     model_type: str
+    model_file: str
     hyperparameters: dict
     training_time_seconds: float
     cross_val_scores: list[float]
