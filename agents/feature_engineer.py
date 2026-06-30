@@ -4,6 +4,8 @@ Feature Engineer Agent.
 
 import json
 import os
+import pandas as pd
+import numpy as np
 from agents.base_agent import BaseAgent
 from core.state import PipelineState
 from core.prompts import (
@@ -124,5 +126,129 @@ class FeatureEngineerAgent(BaseAgent):
             "messages": [{"role": "agent", "name": self.name, "content": "Feature engineering transformations applied."}]
         }
 
+    def _strip_json_fences(self, text) -> str:
+        """Normalize an LLM response into a bare JSON string."""
+        if isinstance(text, list):
+            text = "\n".join(
+                item.get("text", "") if isinstance(item, dict) else str(item)
+                for item in text
+            )
+        text = str(text).strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
+
     def select_features(self, state: PipelineState) -> dict:
-        pass
+        """
+        Refine the engineered feature set by dropping low-importance / redundant
+        features. A RandomForest provides importance scores; the LLM makes the
+        final drop decision (so domain reasoning can override a naive threshold).
+
+        This step is best-effort: any problem yields a warning and leaves the
+        dataset unchanged, so it never breaks the pipeline.
+        """
+        dataset_path = state.get("engineered_dataset_path")
+        target_column = state.get("target_column")
+        task_type = state.get("task_type") or "classification"
+
+        if not dataset_path:
+            return {"warnings": ["Engineer Agent: No engineered_dataset_path found; skipping feature selection."]}
+
+        try:
+            df = pd.read_csv(dataset_path)
+        except Exception as e:
+            return {"warnings": [f"Engineer Agent: could not load engineered dataset for selection: {e}"]}
+
+        if not target_column or target_column not in df.columns:
+            return {"warnings": [f"Engineer Agent: target column '{target_column}' not in engineered dataset; skipping feature selection."]}
+
+        print(f"[{self.name}] Computing feature importances for selection...")
+
+        # Build a numeric feature matrix (X) and the target (y).
+        feature_df = df.drop(columns=[target_column])
+        X = feature_df.select_dtypes(include=[np.number]).fillna(0)
+        if X.shape[1] <= 2:
+            return {"warnings": ["Engineer Agent: too few numeric features to select from; skipping feature selection."]}
+
+        y = df[target_column]
+
+        try:
+            if task_type == "regression":
+                from sklearn.ensemble import RandomForestRegressor
+                model = RandomForestRegressor(n_estimators=100, random_state=42)
+            else:
+                from sklearn.ensemble import RandomForestClassifier
+                if y.dtype == object or str(y.dtype) == "category":
+                    y = y.astype("category").cat.codes
+                model = RandomForestClassifier(n_estimators=100, random_state=42)
+            model.fit(X, y)
+        except Exception as e:
+            return {"warnings": [f"Engineer Agent: importance model failed to fit; skipping feature selection: {e}"]}
+
+        importances = {
+            col: float(score)
+            for col, score in sorted(
+                zip(X.columns, model.feature_importances_),
+                key=lambda kv: kv[1],
+                reverse=True,
+            )
+        }
+
+        # Ask the LLM which features to drop, given the importance scores.
+        features_to_drop = []
+        reasoning = ""
+        try:
+            prompt = FEATURE_SELECTION_PROMPT.format(
+                feature_importances=json.dumps(importances, indent=2)
+            )
+            response = self.llm.invoke(prompt)
+            decision = json.loads(self._strip_json_fences(response.content))
+            features_to_drop = decision.get("features_to_drop", []) or []
+            reasoning = decision.get("reasoning", "")
+        except Exception as e:
+            print(f"[{self.name}] Feature selection decision unavailable ({e}); keeping all features.")
+            features_to_drop = []
+
+        # Safety: only drop columns that exist, never the target, and always
+        # keep at least the target plus one feature.
+        features_to_drop = [c for c in features_to_drop if c in df.columns and c != target_column]
+        if len(df.columns) - len(features_to_drop) <= 2:
+            print(f"[{self.name}] Drop list too aggressive; keeping all features.")
+            features_to_drop = []
+
+        if features_to_drop:
+            df = df.drop(columns=features_to_drop)
+            df.to_csv(dataset_path, index=False)
+            print(f"[{self.name}] Dropped {len(features_to_drop)} feature(s): {features_to_drop}")
+        else:
+            print(f"[{self.name}] No features dropped.")
+
+        final_feature_list = [c for c in df.columns if c != target_column]
+
+        existing_report = state.get("feature_report") or {}
+        updated_report = {
+            **existing_report,
+            "feature_importances": importances,
+            "final_feature_list": final_feature_list,
+            "features_dropped": sorted(
+                set(existing_report.get("features_dropped", []) + features_to_drop)
+            ),
+        }
+        if reasoning:
+            updated_report["engineer_summary"] = (
+                f"{existing_report.get('engineer_summary', '').strip()} "
+                f"Feature selection: {reasoning}"
+            ).strip()
+
+        return {
+            "feature_report": updated_report,
+            "messages": [{
+                "role": "agent",
+                "name": self.name,
+                "content": f"Feature selection complete. Dropped {len(features_to_drop)} feature(s)."
+            }]
+        }

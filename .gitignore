@@ -60,3 +60,6 @@ Phase_3_Complete_Learning_reference.md
 Misc/
 
 *.md
+
+# ...except the project README
+!README.md

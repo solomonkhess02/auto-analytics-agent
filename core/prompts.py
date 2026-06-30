@@ -36,10 +36,15 @@ Write a Python script that:
    - missing_values (dictionary mapping column names to missing value counts)
    - missing_percentages (dictionary mapping column names to percentage of missing values as floats)
    - unique_counts (dictionary mapping column names to number of unique values)
+   - descriptive_stats (dictionary from `df.describe(include='all')`, i.e. a dict of column -> {{stat: value}})
+   - sample_rows (list of the first 5 rows, each as a dictionary of column -> value)
+   - correlations (dictionary from `df.corr(numeric_only=True)`, i.e. a nested dict of column -> {{column: float}}; use an empty dict {{}} if there are no numeric columns)
 3. Outputs the final result EXACTLY as a valid JSON string using `json.dumps()`.
 4. Ensure the output only contains the JSON string and absolutely nothing else. Print the JSON at the very end.
 
-IMPORTANT: Use proper error handling when reading the file."""
+IMPORTANT:
+- Use proper error handling when reading the file.
+- Replace every NaN / NaT / infinite value with null so the printed string is strictly valid JSON (e.g. round-trip through `df.where(pd.notnull(df), None)` for sample rows, and pass `default=str` to `json.dumps`)."""
 
 PROFILER_SUMMARY_PROMPT = """You are a Data Science consultant. Review these dataset statistics:
 Shape: {shape}
