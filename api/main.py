@@ -4,13 +4,21 @@ FastAPI router for LangGraph orchestration.
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 import uuid
 
 from core.graph import build_graph
 
+# Ensure directories exist
+os.makedirs("models", exist_ok=True)
+os.makedirs("reports", exist_ok=True)
+
 app = FastAPI(title="Auto-Analytics Agent API", version="2.0.0")
+
+app.mount("/models", StaticFiles(directory="models"), name="models")
+app.mount("/reports", StaticFiles(directory="reports"), name="reports")
 
 app.add_middleware(
     CORSMiddleware,
@@ -132,19 +140,23 @@ def approve_features(thread_id: str, request: ApproveStepRequest):
         if errors:
             raise HTTPException(status_code=500, detail=f"Pipeline error: {errors}")
 
-        del active_sessions[thread_id]
-
         return {
             "thread_id": thread_id,
             "paused_before": [],
             "feature_report": state.values.get("feature_report"),
             "engineered_dataset_path": state.values.get("engineered_dataset_path"),
+            "training_results": state.values.get("training_results"),
+            "evaluation_report": state.values.get("evaluation_report"),
         }
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # This is the terminal step of the pipeline; drop the session regardless
+        # of success or failure so abandoned/errored runs don't leak.
+        active_sessions.pop(thread_id, None)
 
 
 @app.get("/api/health")

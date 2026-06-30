@@ -84,6 +84,7 @@ class DataCleanerAgent(BaseAgent):
             except RuntimeError as e:
                 return {"errors": [f"Cleaner execution totally failed: {str(e)}"]}
 
+            stats = None
             try:
                 json_str = output.strip()
                 start_idx = json_str.find('{')
@@ -92,11 +93,24 @@ class DataCleanerAgent(BaseAgent):
                     json_str = json_str[start_idx:end_idx+1]
                 stats = json.loads(json_str)
             except json.JSONDecodeError:
-                stats = {"missing_before": 0, "missing_after": 0, "rows_before": 0, "rows_after": 0}
                 print(f"[{self.name}] Warning: Could not parse execution stats JSON.")
 
+            if stats is None:
+                # Without parseable stats we cannot verify the dataset is clean.
+                # Treat this as a validation failure and force a retry rather than
+                # silently reporting a (possibly still-dirty) dataset as clean.
+                print(f"[{self.name}] VALIDATION FAILED: could not parse stats JSON. Retrying...")
+                current_prompt = (
+                    "Your code executed but did not print the required JSON stats object "
+                    'in the exact format {"missing_before": x, "missing_after": y, '
+                    '"rows_before": a, "rows_after": b}. '
+                    "Print ONLY that JSON object at the very end. Fix your code and try again.\n\n"
+                    f"Original instructions:\n{prompt}"
+                )
+                continue
+
             missing_after = stats.get("missing_after", 0)
-            
+
             if missing_after > 0:
                 print(f"[{self.name}] VALIDATION FAILED: {missing_after} missing values remain! Retrying...")
                 current_prompt = (

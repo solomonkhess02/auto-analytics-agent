@@ -142,3 +142,90 @@ Output a structured JSON dictionary with:
 - "features_to_drop": list of string column names to drop.
 - "reasoning": explanation of why these were chosen to be dropped.
 Output EXACTLY valid JSON, nothing else."""
+
+
+MODEL_TRAINING_PROMPT = """You are a Python ML Engineer. Write a script to train multiple machine learning models.
+
+Engineered dataset path: {engineered_dataset_path}
+Target column: {target_column}
+Task type: {task_type}
+Artifacts directory: {artifacts_dir}
+
+Instructions:
+1. Load the engineered dataset with pandas.
+2. Separate features (X) and target (y). Drop any unique identifiers (like 'id', 'name') if they are still present.
+3. Split the data into train and test sets (test_size=0.2, random_state=42) and save them to '{artifacts_dir}/train.csv' and '{artifacts_dir}/test.csv' respectively.
+4. Based on the task type ({task_type}), select at least 3 models to train:
+   - For classification: RandomForestClassifier, GradientBoostingClassifier, and LogisticRegression.
+   - For regression: RandomForestRegressor, GradientBoostingRegressor, and LinearRegression.
+5. For each model:
+   - Use cross_val_score (with cv=3) on the training set to get cross-validation scores. Use accuracy/ROC-AUC for classification and R2/negative RMSE for regression.
+   - Fit the model on the full training set.
+   - Measure training time in seconds.
+   - Save the trained model to the artifacts directory as '{artifacts_dir}/' + model_name_sanitized + '.joblib'. Use standard joblib.dump.
+   - Record the EXACT path you saved the model to and include it as "model_file" in the output (see format below).
+6. Print a JSON list of training results at the very end in this exact format:
+   [
+     {{
+       "model_name": "Random Forest",
+       "model_type": "RandomForestClassifier",
+       "model_file": "{artifacts_dir}/random_forest.joblib",
+       "hyperparameters": {{"n_estimators": 100, ...}},
+       "training_time_seconds": 1.25,
+       "cross_val_scores": [0.82, 0.85, 0.81],
+       "cross_val_mean": 0.8267
+     }},
+     ...
+   ]
+7. Provide ONLY the Python code in ```python ... ``` blocks.
+"""
+
+
+MODEL_EVALUATION_PROMPT = """You are a Python Data Scientist. Write a script to evaluate the best model and generate visual plots and reports.
+
+Artifacts directory: {artifacts_dir}
+Target column: {target_column}
+Task type: {task_type}
+Best model name: {best_model_name}
+Best model file: {best_model_file}
+Report HTML path: {report_html_path}
+
+Instructions:
+1. Load the test dataset '{artifacts_dir}/test.csv'.
+2. Load the best trained model using joblib from '{best_model_file}'.
+3. Separate features (X_test) and target (y_test).
+4. Run predictions on the test set.
+5. Calculate evaluation metrics on the test set:
+   - For classification: accuracy, precision, recall, f1_score, and confusion matrix.
+   - For regression: r2, mae, mse, rmse.
+6. Get feature importances or model coefficients. Create a bar chart showing the top 10 feature importances/coefficients, and save it to '{artifacts_dir}/feature_importance.png'.
+7. Generate plots based on task type:
+   - For classification: Generate and save confusion matrix heatmap to '{artifacts_dir}/confusion_matrix.png'.
+   - For regression: Generate and save actual vs predicted scatter plot to '{artifacts_dir}/actual_vs_predicted.png'.
+8. Generate a professional HTML report and save it to '{report_html_path}'. The HTML report should be beautiful, modern (styled with a clean dark/light UI or inline CSS), and display:
+   - Evaluation metrics table.
+   - Top 10 feature importances.
+   - Embedded images of the generated plots (using relative paths or base64, relative path to `{artifacts_dir}` is preferred).
+9. Print a JSON object describing the evaluation results:
+   {{
+     "best_model_name": "{best_model_name}",
+     "metrics": {{"accuracy": x, "precision": y, ...}},
+     "confusion_matrix": [[...], ...],
+     "classification_report": "...",
+     "feature_importances": {{"col1": 0.45, "col2": 0.2, ...}},
+     "plot_paths": ["{artifacts_dir}/feature_importance.png", ...],
+     "report_html_path": "{report_html_path}"
+   }}
+10. Provide ONLY the Python code in ```python ... ``` blocks.
+"""
+
+
+EVALUATION_SUMMARY_PROMPT = """You are a Senior Data Scientist. Review these model evaluation metrics:
+Best Model: {best_model_name}
+Task Type: {task_type}
+Metrics: {metrics}
+Top Features: {top_features}
+
+Write a concise, professional 3-sentence summary of the model performance.
+Mention the best model, its key performance metric value on the test set, and what features were most influential in the model's predictions.
+"""

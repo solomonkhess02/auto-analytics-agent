@@ -63,8 +63,28 @@ function SectionHeader({ icon, title, subtitle }: { icon: string; title: string;
 // Main Page
 // ---------------------------------------------------------------------------
 
+interface TrainingResult {
+  model_name: string;
+  model_type: string;
+  hyperparameters: Record<string, any>;
+  training_time_seconds: number;
+  cross_val_scores: number[];
+  cross_val_mean: number;
+}
+
+interface EvaluationReport {
+  best_model_name: string;
+  metrics: Record<string, number>;
+  confusion_matrix: number[][] | null;
+  classification_report: string | null;
+  feature_importances: Record<string, number>;
+  plot_paths: string[];
+  natural_language_report: string;
+  report_html_path: string;
+}
+
 export default function Home() {
-  // Stage: 0=upload, 1=review cleaning plan, 2=review feature plan, 3=done
+  // Stage: 0=upload, 1=review cleaning plan, 2=review feature plan, 3=engineering complete, 4=done
   const [stage, setStage] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +102,8 @@ export default function Home() {
   const [featurePlan, setFeaturePlan] = useState<Record<string, any> | null>(null);
   const [featureReport, setFeatureReport] = useState<FeatureReport | null>(null);
   const [engineeredPath, setEngineeredPath] = useState<string | null>(null);
+  const [trainingResults, setTrainingResults] = useState<TrainingResult[] | null>(null);
+  const [evaluationReport, setEvaluationReport] = useState<EvaluationReport | null>(null);
 
   const apiBase = "http://localhost:8000";
 
@@ -138,7 +160,7 @@ export default function Home() {
   };
 
   // -------------------------------------------------------------------------
-  // Step 3: Approve Feature Plan
+  // Step 3: Approve Feature Plan (Executes Feature Engineering + Model Training + Evaluation)
   // -------------------------------------------------------------------------
   const approveFeatures = async (feedback: string) => {
     if (!threadId) return;
@@ -155,7 +177,9 @@ export default function Home() {
 
       setFeatureReport(data.feature_report);
       setEngineeredPath(data.engineered_dataset_path);
-      setStage(3);
+      setTrainingResults(data.training_results);
+      setEvaluationReport(data.evaluation_report);
+      setStage(4);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -176,6 +200,8 @@ export default function Home() {
     setFeaturePlan(null);
     setFeatureReport(null);
     setEngineeredPath(null);
+    setTrainingResults(null);
+    setEvaluationReport(null);
   };
 
   // -------------------------------------------------------------------------
@@ -355,12 +381,11 @@ export default function Home() {
             )}
           </div>
         )}
-
         {/* ---- STAGE 3: Feature Engineering Complete ---- */}
-        {stage === 3 && featureReport && (
+        {stage >= 3 && featureReport && (
           <div className="bg-slate-900 border border-purple-900/40 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="px-6 py-4 bg-purple-950/30 border-b border-purple-900/30">
-              <SectionHeader icon="🎉" title="Pipeline Phases Complete!" subtitle="Data is cleaned and features are engineered. Ready for model training." />
+              <SectionHeader icon="🎉" title="Feature Engineering Complete" subtitle="Data features have been cleaned and engineered successfully." />
             </div>
             <div className="p-6 space-y-4">
               {featureReport.features_created.length > 0 && (
@@ -400,16 +425,136 @@ export default function Home() {
                   </div>
                 </div>
               )}
-              <button
-                onClick={reset}
-                className="w-full py-3 rounded-xl font-semibold text-slate-400 border border-slate-700 hover:bg-slate-800 hover:text-slate-200 transition-all mt-2"
-              >
-                ↩ Run Another Dataset
-              </button>
+              {stage === 3 && (
+                <button
+                  onClick={reset}
+                  className="w-full py-3 rounded-xl font-semibold text-slate-400 border border-slate-700 hover:bg-slate-800 hover:text-slate-200 transition-all mt-2"
+                >
+                  ↩ Run Another Dataset
+                </button>
+              )}
             </div>
           </div>
         )}
 
+        {/* ---- STAGE 4: Model Training & Evaluation complete ---- */}
+        {stage === 4 && trainingResults && evaluationReport && (
+          <div className="bg-slate-900 border border-emerald-900/40 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="px-6 py-4 bg-emerald-950/30 border-b border-emerald-900/30">
+              <SectionHeader icon="🏆" title="Model Training & Evaluation Dashboard" subtitle="Models trained, evaluated, and ready for deployment." />
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Leaderboard Table */}
+              <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+                <h3 className="text-xs text-slate-400 font-bold uppercase tracking-wider">Model Training Leaderboard</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-xs text-slate-500 font-semibold uppercase">
+                        <th className="py-3 px-4">Model</th>
+                        <th className="py-3 px-4">Type</th>
+                        <th className="py-3 px-4">Train Time (s)</th>
+                        <th className="py-3 px-4 text-right">Mean CV Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trainingResults.map((result) => {
+                        const isBest = result.model_name === evaluationReport.best_model_name;
+                        return (
+                          <tr
+                            key={result.model_name}
+                            className={`border-b border-slate-800/50 text-sm transition-colors hover:bg-slate-900/40 ${
+                              isBest ? "bg-emerald-500/5 font-semibold" : ""
+                            }`}
+                          >
+                            <td className="py-3 px-4 flex items-center gap-2">
+                              {result.model_name}
+                              {isBest && (
+                                <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                  🏆 Best
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-xs text-slate-500">{result.model_type}</td>
+                            <td className="py-3 px-4 font-mono text-xs text-slate-400">{result.training_time_seconds.toFixed(2)}s</td>
+                            <td className="py-3 px-4 font-mono text-right text-emerald-400">
+                              {result.cross_val_mean.toFixed(4)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Best Model Evaluation metrics */}
+              <div className="space-y-4">
+                <h3 className="text-xs text-slate-400 font-bold uppercase tracking-wider">Test Set Performance ({evaluationReport.best_model_name})</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Object.entries(evaluationReport.metrics).map(([key, val]) => (
+                    <div key={key} className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-1">
+                      <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
+                        {key.replace(/_/g, " ")}
+                      </div>
+                      <div className="text-slate-100 text-lg font-bold font-mono">
+                        {typeof val === "number" ? val.toFixed(4) : val}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Visualization Plots */}
+              {evaluationReport.plot_paths.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-xs text-slate-400 font-bold uppercase tracking-wider">Evaluation Visualizations</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {evaluationReport.plot_paths.map((path) => {
+                      const filename = path.split(/[/\\]/).pop() || "";
+                      const name = filename.replace(".png", "").replace(/_/g, " ").toUpperCase();
+                      return (
+                        <div key={path} className="bg-slate-950/80 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center gap-3">
+                          <span className="text-xs text-slate-400 font-semibold tracking-wider">{name}</span>
+                          <img
+                            src={`${apiBase}/${path.replace(/\\/g, "/")}`}
+                            alt={name}
+                            className="rounded-lg border border-slate-800 max-h-60 object-contain w-full hover:scale-[1.02] transition-transform duration-300"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* NL Report Summary */}
+              <div className="bg-gradient-to-br from-emerald-950/30 to-slate-950 p-5 rounded-xl border border-emerald-900/30">
+                <p className="text-emerald-400 text-xs font-semibold tracking-widest uppercase mb-2">✨ Agent Evaluation Summary</p>
+                <p className="text-slate-300 leading-relaxed text-sm">{evaluationReport.natural_language_report}</p>
+              </div>
+
+              {/* Download Full HTML report */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <a
+                  href={`${apiBase}/${evaluationReport.report_html_path.replace(/\\/g, "/")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 hover:shadow-blue-500/20 text-white rounded-xl font-bold text-center text-sm transition-all shadow-md flex items-center justify-center gap-2"
+                >
+                  📊 View Full HTML Report
+                </a>
+                <button
+                  onClick={reset}
+                  className="flex-1 py-3.5 px-4 rounded-xl font-semibold text-slate-400 border border-slate-700 hover:bg-slate-800 hover:text-slate-200 transition-all text-sm"
+                >
+                  ↩ Run Another Dataset
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
